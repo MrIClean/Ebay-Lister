@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 
 from app.config import get_settings
-from app.models import AnalyzeRequest, AnalyzeResponse, CorrectionRequest
+from app.models import AnalyzeRequest, AnalyzeResponse, CorrectionRequest, SimpleAnalyzeResponse
 from app.orchestrator import ListingPipeline
 from app.services.cache import CompsCache
 from app.services.corrections import CorrectionStore
@@ -17,10 +17,9 @@ from app.services.ebay_client import EbayCredentials, MockEbayClient, RealEbayCl
 from app.services.valuation import ValuationService
 from app.services.vision import GeminiVisionService, GoogleLensVisionService, MockVisionService
 
-load_dotenv()
-settings = get_settings()
-
 base_dir = Path(__file__).resolve().parent.parent
+load_dotenv(base_dir / ".env", override=True)
+settings = get_settings()
 state_dir = base_dir / ".state"
 
 corrections = CorrectionStore(state_dir / "corrections.db")
@@ -45,6 +44,8 @@ if settings.use_real_ebay:
             client_id=settings.ebay_client_id,
             client_secret=settings.ebay_client_secret,
             refresh_token=settings.ebay_refresh_token,
+            environment=settings.ebay_environment,
+            marketplace_id=settings.ebay_marketplace_id,
         )
     )
 else:
@@ -59,7 +60,7 @@ pipeline = ListingPipeline(
     fallback_ebay=fallback_ebay,
 )
 
-app = FastAPI(title="Hero-Style Listing Backend", version="0.1.0")
+app = FastAPI(title="PixelProfit Listing Backend", version="0.1.0")
 
 
 def _authorize(api_key: str | None) -> None:
@@ -74,6 +75,7 @@ def health(x_api_key: str | None = Header(default=None, alias="X-Api-Key")) -> d
         "status": "ok",
         "vision_mode": "google-lens" if settings.use_google_lens and settings.serpapi_api_key else "gemini-or-mock",
         "use_real_ebay": settings.use_real_ebay,
+        "ebay_environment": settings.ebay_environment,
         "auth_required": bool(settings.backend_api_token),
     }
 
@@ -113,6 +115,59 @@ async def analyze(request: AnalyzeRequest, x_api_key: str | None = Header(defaul
 
     try:
         return await pipeline.run(image_path, request.override_keywords)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {exc}") from exc
+    finally:
+        if temp_file_path and temp_file_path.exists():
+            temp_file_path.unlink(missing_ok=True)
+
+
+@app.post("/analyze/simple", response_model=SimpleAnalyzeResponse)
+async def analyze_simple(request: AnalyzeRequest, x_api_key: str | None = Header(default=None, alias="X-Api-Key")) -> SimpleAnalyzeResponse:
+    _authorize(x_api_key)
+    image_path: str
+    temp_file_path: Path | None = None
+
+    if request.image_base64:
+        if len(request.image_base64) > 20_000_000:
+            raise HTTPException(status_code=400, detail="image_base64 payload is too large")
+
+        try:
+            image_bytes = base64.b64decode(request.image_base64, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise HTTPException(status_code=400, detail="image_base64 is invalid") from exc
+
+        suffix = ".jpg"
+        if request.image_mime_type == "image/png":
+            suffix = ".png"
+        elif request.image_mime_type == "image/webp":
+            suffix = ".webp"
+
+        with NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_file.write(image_bytes)
+            image_path = temp_file.name
+            temp_file_path = Path(temp_file.name)
+    elif request.image_path:
+        image = Path(request.image_path)
+        if not image.exists():
+            raise HTTPException(status_code=400, detail="image_path does not exist")
+        image_path = request.image_path
+    else:
+        raise HTTPException(status_code=400, detail="Provide image_base64 or image_path")
+
+    try:
+        result = await pipeline.run(image_path, request.override_keywords)
+        source = result.comps.source
+        if source not in ("eBay Sold Comps", "PriceCharting"):
+            source = "Estimated Market Value"
+        return SimpleAnalyzeResponse(
+            success=True,
+            detected_title=result.vision.draft_title,
+            median_price=result.comps.median_price,
+            source_label=source,
+            confidence_score=result.vision.confidence,
+            identified_keywords=result.vision.suggested_keywords,
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {exc}") from exc
     finally:

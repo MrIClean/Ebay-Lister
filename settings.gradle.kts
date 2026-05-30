@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "EbayLister"
+rootProject.name = "PixelProfit"
 include(":app")

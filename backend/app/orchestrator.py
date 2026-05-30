@@ -39,11 +39,11 @@ class ListingPipeline:
         cached_payload = self.cache.get(normalized_keywords)
 
         try:
-            listings = await self.ebay.sold_listings(normalized_keywords)
+            listings = await self.ebay.sold_listings(normalized_keywords, limit=20)
             active_count, sold_total_count = await self.ebay.market_counts(normalized_keywords)
             comps = self.valuation.summarize(
                 listings,
-                source="ebay-api",
+                source=self.ebay.source_name(),
                 cached=False,
                 sold_total_count=sold_total_count,
                 active_count=active_count,
@@ -52,18 +52,18 @@ class ListingPipeline:
             return AnalyzeResponse(vision=vision, normalized_keywords=normalized_keywords, comps=comps)
         except EbayClientError:
             if cached_payload:
-                cached = self.valuation.summarize([], source="cache", cached=True)
+                cached = self.valuation.summarize([], source="Estimated Market Value", cached=True)
                 cached = cached.model_copy(update=cached_payload)
                 return AnalyzeResponse(vision=vision, normalized_keywords=normalized_keywords, comps=cached)
 
             if self.fallback_ebay is None:
                 raise
 
-            listings = await self.fallback_ebay.sold_listings(normalized_keywords)
+            listings = await self.fallback_ebay.sold_listings(normalized_keywords, limit=20)
             active_count, sold_total_count = await self.fallback_ebay.market_counts(normalized_keywords)
             comps = self.valuation.summarize(
                 listings,
-                source="mock-fallback",
+                source="Estimated Market Value",
                 cached=False,
                 sold_total_count=sold_total_count,
                 active_count=active_count,

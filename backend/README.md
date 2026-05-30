@@ -84,15 +84,30 @@ Set in `.env`:
 - `EBAY_CLIENT_ID=...`
 - `EBAY_CLIENT_SECRET=...`
 - `EBAY_REFRESH_TOKEN=...`
+- `EBAY_ENVIRONMENT=sandbox` (or `production`)
+- `EBAY_MARKETPLACE_ID=EBAY_US`
 
 If real eBay fails, cached comps are used first, then optional mock fallback.
+
+Quick verification after restart:
+
+- `GET /health` should show `"use_real_ebay": true`
+- `GET /health` should show `"ebay_environment": "sandbox"` (or your selected env)
+- `/analyze` should return `comps.source` as `ebay-api` for live pricing
+
+Comps source labels returned by `/analyze`:
+
+- `ebay-api`: live eBay Browse API results
+- `mock`: synthetic pricing generated from keyword hash (for dev only)
+- `mock-fallback`: synthetic pricing used after real eBay errors when fallback is enabled
+- `cache`: previously cached comps
 
 ## Real AI mode (Gemini)
 
 Set in `.env`:
 
 - `GEMINI_API_KEY=...`
-- `GEMINI_MODEL=gemini-1.5-flash`
+- `GEMINI_MODEL=gemini-2.5-flash`
 
 If `GEMINI_API_KEY` is empty, the backend uses mock vision results.
 
@@ -115,33 +130,6 @@ Set `BACKEND_API_TOKEN` in `.env` for simple app-to-backend authentication.
 
 - When set, clients must send header: `X-Api-Key: <BACKEND_API_TOKEN>`
 - `GET /health`, `POST /analyze`, and `POST /corrections` enforce this token.
-
-## Deploy to Render (cell-data ready)
-
-This repo includes a Render blueprint config at `render.yaml`.
-
-1. Push this repository to GitHub.
-2. In Render, choose `New +` -> `Blueprint` and select your repo.
-3. Confirm service settings:
-  - `Root Directory`: `backend`
-  - `Build Command`: `pip install -r requirements.txt`
-  - `Start Command`: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-4. Add secrets in Render dashboard:
-  - `BACKEND_API_TOKEN`
-  - `SERPAPI_API_KEY` (if using Lens)
-  - `GEMINI_API_KEY` (optional fallback)
-  - `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_REFRESH_TOKEN` (for real eBay)
-5. Deploy, then copy your HTTPS URL, for example `https://ebay-lister-backend.onrender.com`.
-6. In the Android app:
-  - Switch backend mode to `Cloud`
-  - Set `Backend URL` to the Render URL
-  - Set `Backend API Token` to the same `BACKEND_API_TOKEN`
-  - Tap `Test connection`
-
-Notes:
-
-- Free Render instances may sleep; first request can take longer.
-- If `GET /health` returns 401, check token mismatch in app vs Render env var.
 
 ## Snapshot fields returned by `/analyze`
 

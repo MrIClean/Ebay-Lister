@@ -1,11 +1,18 @@
-# Ebay Lister
+# PixelProfit
+
+Snap a photo. Generate a draft. Maximize profit.
+
+## Go-Live Store Listing Draft
+
+PixelProfit is the ultimate automation tool for resellers. Just snap a photo of your item, and our AI instantly identifies the brand, checks market comps, and builds a fully optimized listing draft ready for publication.
 
 Android starter project for an item-identification and eBay listing workflow.
 
 ## What this scaffold includes
 
 - Kotlin + Jetpack Compose Android app shell
-- Main screen with CameraX preview and photo capture, plus item analysis, marketplace stats, and listing actions
+- Main screen focused on CameraX photo capture and a large Analyze action
+- Dedicated Draft Library screen for storing multiple analyzed items
 - Captured-photo thumbnail preview directly in the main flow
 - On-device ML Kit image labeling for free item analysis from the captured photo
 - ViewModel-driven UI state with placeholder service seams for camera, image recognition, marketplace search, OAuth, and listing publishing
@@ -22,6 +29,12 @@ Android starter project for an item-identification and eBay listing workflow.
   - median sold price
 - Connect to an eBay account
 - Publish a prebuilt listing draft to eBay
+
+## Current app flow
+
+- `Main` screen: capture photo, tap `Analyze`, then tap `Save Draft` for keeper items.
+- `Drafts` screen: view saved item drafts from sourcing trips and remove drafts you do not want.
+- Re-analyzing and saving the same detected item updates the existing draft entry.
 
 ## Project status
 
@@ -63,7 +76,7 @@ adb devices
 .\gradlew.bat installDebug
 ```
 
-5. Open Ebay Lister on the phone, allow camera permission, and tap Take photo.
+5. Open PixelProfit on the phone, allow camera permission, and tap Take photo.
 
 ## Next step
 
@@ -111,15 +124,36 @@ The app Market Snapshot now shows:
 
 ## Using the app over cellular data
 
-- Deploy backend to a public HTTPS host (for example Render or Fly).
-- Set your cloud URL in the app and switch mode to `Cloud`.
+- Run the backend on your computer and expose it through a free Cloudflare quick tunnel.
+- Set your tunnel URL in the app and switch mode to `Cloud`.
 - (Recommended) set `BACKEND_API_TOKEN` on backend and paste the same token in app `Backend API Token`.
 - Tap `Test connection` to verify health before running Analyze.
 
-### Quick Cloud Checklist
+## Free computer-hosted mode (no hosting fees)
 
-1. Deploy backend to Render using `render.yaml` in the repo root.
-2. In Render set secrets: `BACKEND_API_TOKEN`, `SERPAPI_API_KEY`, and eBay credentials.
-3. Open app, switch mode to `Cloud`, paste Render URL and token.
-4. Tap `Test connection`.
-5. Capture and Analyze over cell data.
+You can run the backend on your own computer and expose it through a free Cloudflare quick tunnel.
+
+Requirements:
+
+- Keep your computer powered on while using the app remotely.
+- Keep both backend and tunnel terminal windows open.
+
+Start it:
+
+```powershell
+cd scripts
+.\start_bridge_windows.ps1
+```
+
+Then:
+
+1. In the tunnel window, copy the `https://*.trycloudflare.com` URL.
+2. In the app, switch mode to `Cloud`.
+3. Set `Backend URL` to that tunnel URL.
+4. Set `Backend API Token` to the value of `BACKEND_API_TOKEN` in `backend/.env`.
+5. Tap `Test connection`, then run Analyze.
+
+Notes:
+
+- Quick tunnel URLs change each time you restart the tunnel.
+- This mode is free, but your backend is only available while your computer is running.

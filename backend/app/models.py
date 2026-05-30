@@ -50,3 +50,12 @@ class AnalyzeResponse(BaseModel):
 class CorrectionRequest(BaseModel):
     predicted: str
     corrected: str
+
+
+class SimpleAnalyzeResponse(BaseModel):
+    success: bool
+    detected_title: str
+    median_price: float
+    source_label: str
+    confidence_score: float
+    identified_keywords: list[str]

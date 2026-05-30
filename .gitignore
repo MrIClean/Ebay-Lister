@@ -8,3 +8,7 @@ captures/
 backend/.env
 backend/.state/
 backend/.venv/
+**/__pycache__/
+*.pyc
+backend/tunnel_*.err.log
+backend/tunnel_*.out.log

@@ -18,6 +18,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
+import org.json.JSONObject
 
 class EbayListerViewModel(application: Application) : AndroidViewModel(application) {
     private val itemAnalyzer = MlKitItemAnalyzer(application.applicationContext)
@@ -249,6 +251,77 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun saveCurrentAsDraft(): Boolean {
+        val photoPath = _uiState.value.capturedPhotoPath
+        val itemTitle = _uiState.value.detectedItem
+        val keyBase = _uiState.value.rawDetectedItem.ifBlank { itemTitle }
+
+        if (photoPath.isNullOrBlank() || keyBase.isBlank() || itemTitle.contains("Tap analyze", ignoreCase = true)) {
+            _uiState.value = _uiState.value.copy(
+                statusMessage = "Analyze an item first, then save it as a draft.",
+            )
+            return false
+        }
+
+        val key = keyBase.trim().lowercase()
+        val current = _uiState.value.savedDrafts
+        val existing = current.firstOrNull { it.id == key }
+        val newDraft = SavedDraftItem(
+            id = key,
+            title = itemTitle,
+            medianPrice = _uiState.value.medianSoldPrice,
+            averagePrice = _uiState.value.averageSoldPrice,
+            lowPrice = _uiState.value.lowSoldPrice,
+            highPrice = _uiState.value.highSoldPrice,
+            source = _uiState.value.compsSource.ifBlank { "unknown" },
+            normalizedKeywords = _uiState.value.normalizedKeywords,
+            suggestedKeywords = _uiState.value.candidateItems,
+            listedCount = _uiState.value.listedCount,
+            soldCount = _uiState.value.soldCount,
+            confidence = _uiState.value.detectedConfidence,
+            listingNotes = "Condition: auto-detected. Verify brand/model and complete item specifics before publishing.",
+            photoPath = photoPath,
+        )
+
+        val updated = if (existing == null) {
+            listOf(newDraft) + current
+        } else {
+            listOf(newDraft) + current.filterNot { it.id == key }
+        }
+
+        _uiState.value = _uiState.value.copy(
+            savedDrafts = updated,
+            listingDraftStatus = if (existing == null) "Draft saved" else "Draft updated",
+            statusMessage = if (existing == null) "Draft saved to library. Ready for next item." else "Draft updated with latest analysis. Ready for next item.",
+            photoStatus = "No photo captured yet",
+            capturedPhotoPath = null,
+            detectedItem = "Tap analyze to identify an item",
+            rawDetectedItem = "",
+            candidateItems = emptyList(),
+            detectedConfidence = "Confidence: unknown",
+            listedCount = 0,
+            soldCount = 0,
+            averageSoldPrice = "$0.00",
+            medianSoldPrice = "$0.00",
+            lowSoldPrice = "$0.00",
+            highSoldPrice = "$0.00",
+            normalizedKeywords = "",
+            compsSource = "",
+            visionProvider = "unknown",
+            visionModelName = "unknown",
+        )
+        saveDrafts(updated)
+        appendDebug("Draft ${if (existing == null) "saved" else "updated"}: ${newDraft.title}")
+        return true
+    }
+
+    fun removeDraft(draftId: String) {
+        val updated = _uiState.value.savedDrafts.filterNot { it.id == draftId }
+        _uiState.value = _uiState.value.copy(savedDrafts = updated, statusMessage = "Draft removed.")
+        saveDrafts(updated)
+        appendDebug("Draft removed: $draftId")
+    }
+
     private fun formatUsd(value: Double): String = "$" + String.format("%.2f", value)
 
     private fun appendDebug(message: String) {
@@ -264,13 +337,82 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.value = _uiState.value.copy(debugLog = updated.takeLast(6000))
     }
 
+    private fun saveDrafts(drafts: List<SavedDraftItem>) {
+        val json = JSONArray()
+        drafts.forEach { draft ->
+            json.put(
+                JSONObject()
+                    .put("id", draft.id)
+                    .put("title", draft.title)
+                    .put("medianPrice", draft.medianPrice)
+                    .put("averagePrice", draft.averagePrice)
+                    .put("lowPrice", draft.lowPrice)
+                    .put("highPrice", draft.highPrice)
+                    .put("source", draft.source)
+                    .put("normalizedKeywords", draft.normalizedKeywords)
+                    .put("suggestedKeywords", JSONArray(draft.suggestedKeywords))
+                    .put("listedCount", draft.listedCount)
+                    .put("soldCount", draft.soldCount)
+                    .put("confidence", draft.confidence)
+                    .put("listingNotes", draft.listingNotes)
+                    .put("photoPath", draft.photoPath)
+            )
+        }
+        prefs.edit().putString("saved_drafts", json.toString()).apply()
+    }
+
+    private fun loadDrafts(): List<SavedDraftItem> {
+        val raw = prefs.getString("saved_drafts", null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val id = item.optString("id", "").trim()
+                    if (id.isBlank()) continue
+                    add(
+                        SavedDraftItem(
+                            id = id,
+                            title = item.optString("title", "Untitled draft"),
+                            medianPrice = item.optString("medianPrice", "$0.00"),
+                            averagePrice = item.optString("averagePrice", "$0.00"),
+                            lowPrice = item.optString("lowPrice", "$0.00"),
+                            highPrice = item.optString("highPrice", "$0.00"),
+                            source = item.optString("source", "unknown"),
+                            normalizedKeywords = item.optString("normalizedKeywords", ""),
+                            suggestedKeywords = buildList {
+                                val keywords = item.optJSONArray("suggestedKeywords")
+                                if (keywords != null) {
+                                    for (k in 0 until keywords.length()) {
+                                        val keyword = keywords.optString(k).trim()
+                                        if (keyword.isNotBlank()) add(keyword)
+                                    }
+                                }
+                            },
+                            listedCount = item.optInt("listedCount", 0),
+                            soldCount = item.optInt("soldCount", 0),
+                            confidence = item.optString("confidence", "Confidence: unknown"),
+                            listingNotes = item.optString(
+                                "listingNotes",
+                                "Condition: auto-detected. Verify brand/model and complete item specifics before publishing.",
+                            ),
+                            photoPath = item.optString("photoPath", ""),
+                        )
+                    )
+                }
+            }
+        }.getOrElse { emptyList() }
+    }
+
     private fun loadSavedSettings() {
         val savedMode = prefs.getString("backend_mode", "local") ?: "local"
-        val savedLocalUrl = prefs.getString("local_backend_url", "http://192.168.1.10:8000") ?: "http://192.168.1.10:8000"
-        val savedCloudUrl = prefs.getString("cloud_backend_url", "https://your-backend-url.onrender.com")
-            ?: "https://your-backend-url.onrender.com"
-        val savedToken = prefs.getString("backend_api_token", "") ?: ""
+        val savedLocalUrl = prefs.getString("local_backend_url", "http://192.168.68.170:8000") ?: "http://192.168.68.170:8000"
+        val savedCloudUrl = prefs.getString("cloud_backend_url", "https://dean-exclusively-approved-receptors.trycloudflare.com")
+            ?: "https://dean-exclusively-approved-receptors.trycloudflare.com"
+        val savedToken = prefs.getString("backend_api_token", "f7b2c9fa7ae14a4abde984dd502cd420be4380ab2aeb4c4e894912814d445500")
+            ?: "f7b2c9fa7ae14a4abde984dd502cd420be4380ab2aeb4c4e894912814d445500"
         val selectedUrl = if (savedMode == "cloud") savedCloudUrl else savedLocalUrl
+        val drafts = loadDrafts()
 
         _uiState.value = _uiState.value.copy(
             backendMode = savedMode,
@@ -278,6 +420,7 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
             cloudBackendUrl = savedCloudUrl,
             backendBaseUrl = selectedUrl,
             backendApiToken = savedToken,
+            savedDrafts = drafts,
         )
     }
 }

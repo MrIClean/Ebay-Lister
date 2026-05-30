@@ -1,11 +1,28 @@
 package com.example.ebaylister.ui
 
+data class SavedDraftItem(
+    val id: String,
+    val title: String,
+    val medianPrice: String,
+    val averagePrice: String,
+    val lowPrice: String,
+    val highPrice: String,
+    val source: String,
+    val normalizedKeywords: String,
+    val suggestedKeywords: List<String>,
+    val listedCount: Int,
+    val soldCount: Int,
+    val confidence: String,
+    val listingNotes: String,
+    val photoPath: String,
+)
+
 data class EbayListerUiState(
-    val backendBaseUrl: String = "http://192.168.1.10:8000",
-    val localBackendUrl: String = "http://192.168.1.10:8000",
-    val cloudBackendUrl: String = "https://your-backend-url.onrender.com",
+    val backendBaseUrl: String = "http://192.168.68.170:8000",
+    val localBackendUrl: String = "http://192.168.68.170:8000",
+    val cloudBackendUrl: String = "https://dean-exclusively-approved-receptors.trycloudflare.com",
     val backendMode: String = "local",
-    val backendApiToken: String = "",
+    val backendApiToken: String = "f7b2c9fa7ae14a4abde984dd502cd420be4380ab2aeb4c4e894912814d445500",
     val connectionStatus: String = "Not tested",
     val visionProvider: String = "unknown",
     val visionModelName: String = "unknown",
@@ -25,6 +42,7 @@ data class EbayListerUiState(
     val highSoldPrice: String = "$0.00",
     val ebayConnectionStatus: String = "Not connected",
     val listingDraftStatus: String = "No listing draft created",
+    val savedDrafts: List<SavedDraftItem> = emptyList(),
     val statusMessage: String = "Ready to capture a photo and begin analysis.",
     val debugEnabled: Boolean = true,
     val debugLog: String = "Debug log ready.",

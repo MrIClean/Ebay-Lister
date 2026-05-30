@@ -13,6 +13,9 @@ class EbayClientError(Exception):
 
 
 class EbayClient:
+    def source_name(self) -> str:
+        return "unknown"
+
     async def sold_listings(self, keywords: str, limit: int = 10) -> list[SoldListing]:
         raise NotImplementedError
 
@@ -25,9 +28,14 @@ class EbayCredentials:
     client_id: str
     client_secret: str
     refresh_token: str
+    environment: str = "sandbox"
+    marketplace_id: str = "EBAY_US"
 
 
 class MockEbayClient(EbayClient):
+    def source_name(self) -> str:
+        return "Estimated Market Value"
+
     async def sold_listings(self, keywords: str, limit: int = 10) -> list[SoldListing]:
         seed = int(hashlib.sha256(keywords.encode("utf-8")).hexdigest(), 16)
         base = 20 + (seed % 120)
@@ -55,6 +63,15 @@ class MockEbayClient(EbayClient):
 class RealEbayClient(EbayClient):
     def __init__(self, creds: EbayCredentials) -> None:
         self.creds = creds
+        env = (creds.environment or "sandbox").strip().lower()
+        if env not in {"sandbox", "production"}:
+            raise EbayClientError("EBAY_ENVIRONMENT must be 'sandbox' or 'production'")
+        self.environment = env
+        self.api_host = "https://api.sandbox.ebay.com" if env == "sandbox" else "https://api.ebay.com"
+        self.marketplace_id = (creds.marketplace_id or "EBAY_US").strip() or "EBAY_US"
+
+    def source_name(self) -> str:
+        return "eBay Sold Comps"
 
     async def sold_listings(self, keywords: str, limit: int = 10) -> list[SoldListing]:
         items, _total = await self._search_items(keywords=keywords, sold_only=True, limit=limit)
@@ -82,7 +99,7 @@ class RealEbayClient(EbayClient):
 
     async def _search_items(self, keywords: str, sold_only: bool, limit: int) -> tuple[list[dict], int]:
         token = await self._access_token()
-        endpoint = "https://api.ebay.com/buy/browse/v1/item_summary/search"
+        endpoint = f"{self.api_host}/buy/browse/v1/item_summary/search"
         filter_value = "buyingOptions:{FIXED_PRICE|AUCTION},itemLocationCountry:US"
         if sold_only:
             filter_value += ",soldItemsOnly:true"
@@ -91,12 +108,11 @@ class RealEbayClient(EbayClient):
             "q": keywords,
             "limit": str(limit),
             "filter": filter_value,
-            "sort": "-price",
         }
 
         headers = {
             "Authorization": f"Bearer {token}",
-            "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+            "X-EBAY-C-MARKETPLACE-ID": self.marketplace_id,
         }
 
         async with httpx.AsyncClient(timeout=20.0) as client:
@@ -115,7 +131,7 @@ class RealEbayClient(EbayClient):
 
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.post(
-                "https://api.ebay.com/identity/v1/oauth2/token",
+                f"{self.api_host}/identity/v1/oauth2/token",
                 data={
                     "grant_type": "refresh_token",
                     "refresh_token": self.creds.refresh_token,

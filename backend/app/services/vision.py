@@ -57,7 +57,7 @@ class MockVisionService(VisionService):
 
 
 class GeminiVisionService(VisionService):
-    def __init__(self, api_key: str, model_name: str = "gemini-1.5-flash") -> None:
+    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash") -> None:
         self.api_key = api_key
         self.model_name = model_name
 
@@ -72,34 +72,59 @@ class GeminiVisionService(VisionService):
 
         client = genai.Client(api_key=self.api_key)
         prompt = (
-            "You are an expert product identifier for resale marketplaces. "
-            "Analyze the image and identify the single primary item for sale. "
+            "You are an expert product identifier specializing in resale, thrift, and e-commerce. "
+            "Your PRIMARY task is to OCR every piece of text visible on the item: model numbers, serial codes, "
+            "FCC IDs, UPC/EAN barcodes, regulatory markings, and manufacturer branding (e.g. 'E9000G', 'G703 Lightspeed', 'FCC ID: XXXXX'). "
+            "Use that text as the ground truth for the exact retail product name and variant. "
+            "Strip out extraneous serial formatting and internal warehouse tracking tags unless they "
+            "directly identify the specific retail variant being sold. "
             "Ignore hands, tables, flooring, and background clutter. "
-            "Use any visible logos, labels, text, shape, and materials. "
+            "Only fall back to shape, materials, and logos if no readable text is present. "
             "If uncertain, keep model generic but still useful for eBay search. "
             "Return ONLY valid JSON with exact keys: "
             "brand, model, category, condition_guess, suggested_keywords, draft_title, confidence. "
-            "Rules: suggested_keywords must be an array of 3 to 6 short search phrases; "
-            "draft_title should be concise and searchable; "
+            "Rules: suggested_keywords must be an array of 3 to 6 short search phrases optimized for eBay; "
+            "draft_title must be the exact manufacturer and model name, concise and searchable; "
+            "brand and model must never contain warehouse codes or sticker prices; "
             "confidence must be a number from 0.0 to 1.0."
         )
 
         with open(image_path, "rb") as f:
             image_bytes = f.read()
 
-        response = client.models.generate_content(
-            model=self.model_name,
-            contents=[
-                {"text": prompt},
-                {
-                    "inline_data": {
-                        "mime_type": self._guess_mime_type(image_path),
-                        "data": image_bytes,
-                    }
-                },
-            ],
-            config={"response_mime_type": "application/json"},
-        )
+        model_names = [
+            self.model_name,
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-2.0-flash-001",
+        ]
+
+        last_error: Exception | None = None
+        response = None
+        for model_name in model_names:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": self._guess_mime_type(image_path),
+                                "data": image_bytes,
+                            }
+                        },
+                    ],
+                    config={"response_mime_type": "application/json"},
+                )
+                self.model_name = model_name
+                break
+            except Exception as exc:
+                last_error = exc
+
+        if response is None:
+            raise RuntimeError(f"Gemini generation failed for all supported models: {last_error}")
 
         parsed = self._parse_json_object(response.text or "")
         parsed["provider"] = "gemini"
