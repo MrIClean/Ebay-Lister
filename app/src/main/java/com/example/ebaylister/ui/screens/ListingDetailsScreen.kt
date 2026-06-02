@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +31,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -39,12 +44,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.ebaylister.ui.EbayPolicyOption
 import com.example.ebaylister.ui.ListingEditorState
 
 @Composable
 fun ListingDetailsScreen(
     editor: ListingEditorState,
     latestCapturePath: String?,
+    fulfillmentPolicies: List<EbayPolicyOption>,
+    returnPolicies: List<EbayPolicyOption>,
+    accountOptionsStatus: String,
+    isLoadingAccountOptions: Boolean,
     onClose: () -> Unit,
     onTitleChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
@@ -52,8 +62,11 @@ fun ListingDetailsScreen(
     onConditionChange: (String) -> Unit,
     onCategoryChange: (String) -> Unit,
     onShippingProfileChange: (String) -> Unit,
+    onShippingPolicySelected: (String) -> Unit,
     onReturnPolicyChange: (String) -> Unit,
+    onReturnPolicySelected: (String) -> Unit,
     onQuantityChange: (String) -> Unit,
+    onRefreshAccountOptions: () -> Unit,
     onAddPhotoPath: (String) -> Unit,
     onRemovePhotoPath: (String) -> Unit,
     onPublishToEbay: () -> Unit,
@@ -84,6 +97,11 @@ fun ListingDetailsScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(onClick = onClose, label = { Text("Back to drafts") })
                 AssistChip(onClick = { photoPicker.launch("image/*") }, label = { Text("Add photos") })
+                AssistChip(
+                    onClick = onRefreshAccountOptions,
+                    enabled = !isLoadingAccountOptions,
+                    label = { Text(if (isLoadingAccountOptions) "Loading eBay" else "Refresh eBay") },
+                )
                 if (!latestCapturePath.isNullOrBlank()) {
                     AssistChip(onClick = { onAddPhotoPath(latestCapturePath) }, label = { Text("Use latest capture") })
                 }
@@ -127,12 +145,17 @@ fun ListingDetailsScreen(
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(
+                        ListingDropdown(
+                            label = "Condition",
                             value = editor.condition,
-                            onValueChange = onConditionChange,
-                            label = { Text("Condition") },
+                            options = listOf(
+                                EbayPolicyOption("new", "New"),
+                                EbayPolicyOption("open-box", "Open box"),
+                                EbayPolicyOption("pre-owned", "Pre-owned"),
+                                EbayPolicyOption("parts", "For parts or not working"),
+                            ),
+                            onSelect = { onConditionChange(it.name) },
                             modifier = Modifier.weight(1f),
-                            singleLine = true,
                         )
 
                         OutlinedTextField(
@@ -152,20 +175,28 @@ fun ListingDetailsScreen(
                         singleLine = true,
                     )
 
-                    OutlinedTextField(
+                    ListingDropdown(
+                        label = "Shipping policy",
                         value = editor.shippingProfile,
-                        onValueChange = onShippingProfileChange,
-                        label = { Text("Shipping profile") },
+                        options = fulfillmentPolicies,
+                        onSelect = { onShippingPolicySelected(it.id) },
+                        fallbackValueChange = onShippingProfileChange,
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
                     )
 
-                    OutlinedTextField(
+                    ListingDropdown(
+                        label = "Return policy",
                         value = editor.returnPolicy,
-                        onValueChange = onReturnPolicyChange,
-                        label = { Text("Return policy") },
+                        options = returnPolicies,
+                        onSelect = { onReturnPolicySelected(it.id) },
+                        fallbackValueChange = onReturnPolicyChange,
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
+                    )
+
+                    Text(
+                        text = accountOptionsStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
                     Text(
@@ -250,6 +281,58 @@ fun ListingDetailsScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ListingDropdown(
+    label: String,
+    value: String,
+    options: List<EbayPolicyOption>,
+    onSelect: (EbayPolicyOption) -> Unit,
+    modifier: Modifier = Modifier,
+    fallbackValueChange: ((String) -> Unit)? = null,
+) {
+    var expanded by remember(label, options) { mutableStateOf(false) }
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { fallbackValueChange?.invoke(it) },
+            readOnly = fallbackValueChange == null || options.isNotEmpty(),
+            label = { Text(label) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = options.isNotEmpty()) { expanded = true },
+            singleLine = true,
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(option.name)
+                            if (option.description.isNotBlank()) {
+                                Text(
+                                    text = option.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    },
+                    onClick = {
+                        onSelect(option)
+                        expanded = false
+                    },
+                )
             }
         }
     }

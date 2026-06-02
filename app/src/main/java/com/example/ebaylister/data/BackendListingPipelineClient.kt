@@ -123,7 +123,9 @@ class BackendListingPipelineClient {
             .put("condition", draft.condition)
             .put("category", draft.category)
             .put("shipping_profile", draft.shippingProfile)
+            .put("shipping_policy_id", draft.shippingPolicyId)
             .put("return_policy", draft.returnPolicy)
+            .put("return_policy_id", draft.returnPolicyId)
             .put("quantity", draft.quantity)
             .put("channel", draft.channel)
             .toString()
@@ -158,6 +160,35 @@ class BackendListingPipelineClient {
                     message = root.optString("message", "Publish response received."),
                     listingUrl = root.optString("listing_url", ""),
                     validationErrors = errors,
+                )
+            }
+        }
+    }
+
+    suspend fun accountOptions(baseUrl: String, apiToken: String = ""): BackendAccountOptionsResult = withContext(Dispatchers.IO) {
+        val requestBuilder = Request.Builder()
+            .url("$baseUrl/account/options")
+            .get()
+        if (apiToken.isNotBlank()) {
+            requestBuilder.header("X-Api-Key", apiToken)
+        }
+        val request = requestBuilder.build()
+
+        withRetry {
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw RuntimeException("Backend account options failed: ${response.code} ${body.take(300)}")
+                }
+
+                val root = JSONObject(body)
+                BackendAccountOptionsResult(
+                    connected = root.optBoolean("connected", false),
+                    marketplaceId = root.optString("marketplace_id", "EBAY_US"),
+                    source = root.optString("source", "unknown"),
+                    message = root.optString("message", ""),
+                    fulfillmentPolicies = parsePolicyOptions(root.optJSONArray("fulfillment_policies")),
+                    returnPolicies = parsePolicyOptions(root.optJSONArray("return_policies")),
                 )
             }
         }
@@ -204,6 +235,24 @@ class BackendListingPipelineClient {
         }
         throw RuntimeException(lastError?.message ?: "Request failed after retries", lastError)
     }
+
+    private fun parsePolicyOptions(array: JSONArray?): List<BackendPolicyOption> {
+        if (array == null) return emptyList()
+        val options = mutableListOf<BackendPolicyOption>()
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val id = item.optString("id", "").trim()
+            val name = item.optString("name", "").trim()
+            if (id.isNotBlank() && name.isNotBlank()) {
+                options += BackendPolicyOption(
+                    id = id,
+                    name = name,
+                    description = item.optString("description", ""),
+                )
+            }
+        }
+        return options
+    }
 }
 
 data class BackendHealthResult(
@@ -229,4 +278,19 @@ data class BackendAnalyzeResult(
     val lowSoldPrice: Double,
     val highSoldPrice: Double,
     val source: String,
+)
+
+data class BackendPolicyOption(
+    val id: String,
+    val name: String,
+    val description: String,
+)
+
+data class BackendAccountOptionsResult(
+    val connected: Boolean,
+    val marketplaceId: String,
+    val source: String,
+    val message: String,
+    val fulfillmentPolicies: List<BackendPolicyOption>,
+    val returnPolicies: List<BackendPolicyOption>,
 )

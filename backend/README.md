@@ -78,6 +78,22 @@ Payload:
 
 Returns top eBay Catalog product match (title, brand, ePID, image URL, product page URL, GTIN list).
 
+### `GET /account/options`
+
+Loads seller business policies for the Android listing editor dropdowns:
+
+- fulfillment policies for shipping
+- return policies
+
+This uses eBay Sell Account API business policies for the configured marketplace.
+Your eBay refresh token must include one of the Account API scopes, preferably:
+
+```text
+https://api.ebay.com/oauth/api_scope/sell.account.readonly
+```
+
+If the endpoint returns `invalid_scope`, reconnect/regenerate the eBay refresh token with that scope included.
+
 ### `POST /corrections`
 
 Payload:

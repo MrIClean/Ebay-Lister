@@ -33,8 +33,8 @@ class FakeEbayListingPublisher {
         if (draft.photoPaths.isEmpty()) errors += "Add at least one photo."
         if (draft.condition.isBlank()) errors += "Choose an item condition."
         if (draft.category.isBlank()) errors += "Add an eBay category."
-        if (draft.shippingProfile.isBlank()) errors += "Add a shipping profile."
-        if (draft.returnPolicy.isBlank()) errors += "Add a return policy."
+        if (draft.shippingProfile.isBlank() && draft.shippingPolicyId.isBlank()) errors += "Add a shipping profile."
+        if (draft.returnPolicy.isBlank() && draft.returnPolicyId.isBlank()) errors += "Add a return policy."
         if (draft.quantity < 1) errors += "Quantity must be at least 1."
         return errors
     }

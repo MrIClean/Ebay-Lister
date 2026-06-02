@@ -22,8 +22,16 @@ data class SavedDraftItem(
     val condition: String = "",
     val category: String = "",
     val shippingProfile: String = "",
+    val shippingPolicyId: String = "",
     val returnPolicy: String = "",
+    val returnPolicyId: String = "",
     val quantity: Int = 1,
+)
+
+data class EbayPolicyOption(
+    val id: String,
+    val name: String,
+    val description: String = "",
 )
 
 data class ListingEditorState(
@@ -35,7 +43,9 @@ data class ListingEditorState(
     val condition: String = "",
     val category: String = "",
     val shippingProfile: String = "",
+    val shippingPolicyId: String = "",
     val returnPolicy: String = "",
+    val returnPolicyId: String = "",
     val quantity: Int = 1,
     val validationErrors: List<String> = emptyList(),
     val publishStatus: String = "Not published yet.",
@@ -72,6 +82,10 @@ data class EbayListerUiState(
     val isAnalyzing: Boolean = false,
     val savedDrafts: List<SavedDraftItem> = emptyList(),
     val listingEditor: ListingEditorState? = null,
+    val fulfillmentPolicies: List<EbayPolicyOption> = emptyList(),
+    val returnPolicies: List<EbayPolicyOption> = emptyList(),
+    val isLoadingAccountOptions: Boolean = false,
+    val accountOptionsStatus: String = "eBay account options not loaded.",
     val statusMessage: String = "Local USB backend is prefilled for testing. API token is optional unless backend auth is enabled.",
     val debugEnabled: Boolean = true,
     val debugLog: String = "Debug log ready.",

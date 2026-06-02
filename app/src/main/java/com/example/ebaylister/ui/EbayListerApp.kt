@@ -139,6 +139,10 @@ fun EbayListerApp(
                         ListingDetailsScreen(
                             editor = editor,
                             latestCapturePath = state.capturedPhotoPath,
+                            fulfillmentPolicies = state.fulfillmentPolicies,
+                            returnPolicies = state.returnPolicies,
+                            accountOptionsStatus = state.accountOptionsStatus,
+                            isLoadingAccountOptions = state.isLoadingAccountOptions,
                             onClose = {
                                 viewModel.closeListingEditor()
                                 screen = "drafts"
@@ -149,8 +153,11 @@ fun EbayListerApp(
                             onConditionChange = viewModel::updateListingEditorCondition,
                             onCategoryChange = viewModel::updateListingEditorCategory,
                             onShippingProfileChange = viewModel::updateListingEditorShippingProfile,
+                            onShippingPolicySelected = viewModel::selectShippingPolicy,
                             onReturnPolicyChange = viewModel::updateListingEditorReturnPolicy,
+                            onReturnPolicySelected = viewModel::selectReturnPolicy,
                             onQuantityChange = viewModel::updateListingEditorQuantity,
+                            onRefreshAccountOptions = viewModel::refreshEbayAccountOptions,
                             onAddPhotoPath = viewModel::addListingEditorPhoto,
                             onRemovePhotoPath = viewModel::removeListingEditorPhoto,
                             onPublishToEbay = viewModel::publishListingEditorToEbay,

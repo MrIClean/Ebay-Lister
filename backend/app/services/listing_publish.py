@@ -44,9 +44,9 @@ class ListingPublishService:
             errors.append("Choose an item condition.")
         if not draft.category.strip():
             errors.append("Add an eBay category.")
-        if not draft.shipping_profile.strip():
+        if not draft.shipping_profile.strip() and not draft.shipping_policy_id.strip():
             errors.append("Add a shipping profile.")
-        if not draft.return_policy.strip():
+        if not draft.return_policy.strip() and not draft.return_policy_id.strip():
             errors.append("Add a return policy.")
         if draft.quantity < 1:
             errors.append("Quantity must be at least 1.")

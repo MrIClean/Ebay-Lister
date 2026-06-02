@@ -63,6 +63,21 @@ class BarcodeLookupResponse(BaseModel):
     source: str = "eBay Catalog"
 
 
+class PolicyOption(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+
+
+class AccountOptionsResponse(BaseModel):
+    connected: bool
+    marketplace_id: str
+    source: str
+    message: str = ""
+    fulfillment_policies: list[PolicyOption] = Field(default_factory=list)
+    return_policies: list[PolicyOption] = Field(default_factory=list)
+
+
 class CorrectionRequest(BaseModel):
     predicted: str
     corrected: str
@@ -76,7 +91,9 @@ class PublishListingRequest(BaseModel):
     condition: str = ""
     category: str = ""
     shipping_profile: str = ""
+    shipping_policy_id: str = ""
     return_policy: str = ""
+    return_policy_id: str = ""
     quantity: int = 1
     channel: str = "ebay"
 

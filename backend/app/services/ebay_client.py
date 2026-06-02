@@ -29,6 +29,9 @@ class EbayClient:
     async def catalog_by_barcode(self, barcode: str) -> "CatalogProductResult":
         raise EbayClientError("Barcode catalog lookup is not available for this client")
 
+    async def account_options(self) -> "AccountOptionsResult":
+        raise EbayClientError("Account options are not available for this client")
+
 
 @dataclass
 class EbayCredentials:
@@ -57,6 +60,23 @@ class CatalogProductResult:
     product_web_url: str
     image_url: str
     gtins: list[str]
+
+
+@dataclass
+class PolicyOptionResult:
+    id: str
+    name: str
+    description: str = ""
+
+
+@dataclass
+class AccountOptionsResult:
+    connected: bool
+    marketplace_id: str
+    source: str
+    message: str
+    fulfillment_policies: list[PolicyOptionResult]
+    return_policies: list[PolicyOptionResult]
 
 
 class MockEbayClient(EbayClient):
@@ -92,6 +112,22 @@ class MockEbayClient(EbayClient):
     async def catalog_by_barcode(self, barcode: str) -> CatalogProductResult:
         raise EbayClientError("Barcode catalog lookup requires USE_REAL_EBAY=true")
 
+    async def account_options(self) -> AccountOptionsResult:
+        return AccountOptionsResult(
+            connected=False,
+            marketplace_id="EBAY_US",
+            source="mock",
+            message="Real eBay account credentials are not configured.",
+            fulfillment_policies=[
+                PolicyOptionResult(id="mock-ground", name="USPS Ground Advantage", description="Mock local option"),
+                PolicyOptionResult(id="mock-priority", name="USPS Priority Mail", description="Mock local option"),
+            ],
+            return_policies=[
+                PolicyOptionResult(id="mock-30-days", name="30 day returns", description="Mock local option"),
+                PolicyOptionResult(id="mock-no-returns", name="No returns", description="Mock local option"),
+            ],
+        )
+
 
 class RealEbayClient(EbayClient):
     def __init__(self, creds: EbayCredentials) -> None:
@@ -104,6 +140,7 @@ class RealEbayClient(EbayClient):
         self.marketplace_id = (creds.marketplace_id or "EBAY_US").strip() or "EBAY_US"
         self.browse_scope = "https://api.ebay.com/oauth/api_scope"
         self.catalog_scope = "https://api.ebay.com/oauth/api_scope/commerce.catalog.readonly"
+        self.account_scope = "https://api.ebay.com/oauth/api_scope/sell.account.readonly"
 
     def source_name(self) -> str:
         return "eBay Sold Comps"
@@ -257,6 +294,43 @@ class RealEbayClient(EbayClient):
             image_url=(image.get("imageUrl") or "").strip(),
             gtins=gtins,
         )
+
+    async def account_options(self) -> AccountOptionsResult:
+        fulfillment = await self._account_policy_list("fulfillment_policy", "fulfillmentPolicies", "fulfillmentPolicyId")
+        returns = await self._account_policy_list("return_policy", "returnPolicies", "returnPolicyId")
+        return AccountOptionsResult(
+            connected=True,
+            marketplace_id=self.marketplace_id,
+            source="ebay-account-api",
+            message="Loaded seller business policies from eBay.",
+            fulfillment_policies=fulfillment,
+            return_policies=returns,
+        )
+
+    async def _account_policy_list(self, resource: str, container: str, id_field: str) -> list[PolicyOptionResult]:
+        token = await self._access_token(scope=self.account_scope)
+        endpoint = f"{self.api_host}/sell/account/v1/{resource}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "X-EBAY-C-MARKETPLACE-ID": self.marketplace_id,
+        }
+        params = {"marketplace_id": self.marketplace_id}
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(endpoint, params=params, headers=headers)
+            if response.status_code >= 400:
+                raise EbayClientError(f"eBay account policy lookup failed: {response.status_code} {response.text}")
+
+        payload = response.json()
+        policies = payload.get(container) or []
+        results: list[PolicyOptionResult] = []
+        for policy in policies:
+            policy_id = str(policy.get(id_field) or policy.get(id_field[0].lower() + id_field[1:]) or "").strip()
+            name = str(policy.get("name") or "").strip()
+            description = str(policy.get("description") or "").strip()
+            if policy_id and name:
+                results.append(PolicyOptionResult(id=policy_id, name=name, description=description))
+        return results
 
     async def _search_items(self, keywords: str, sold_only: bool, limit: int) -> tuple[list[dict], int]:
         token = await self._access_token()

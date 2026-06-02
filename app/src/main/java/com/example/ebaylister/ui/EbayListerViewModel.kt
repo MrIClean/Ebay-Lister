@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.ebaylister.data.AnalyzerCorrectionStore
 import com.example.ebaylister.data.BackendAnalyzeResult
 import com.example.ebaylister.data.BackendListingPipelineClient
+import com.example.ebaylister.data.BackendPolicyOption
 import com.example.ebaylister.data.FakeEbayListingPublisher
 import com.example.ebaylister.data.FakeEbayMarketplaceRepository
 import com.example.ebaylister.data.MlKitItemAnalyzer
@@ -377,10 +378,11 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
 
     fun connectEbayAccount() {
         _uiState.value = _uiState.value.copy(
-            ebayConnectionStatus = "Ready to connect to eBay OAuth",
-            statusMessage = "Add the eBay OAuth flow and account linking here.",
+            ebayConnectionStatus = "Loading eBay account policies",
+            statusMessage = "Loading shipping and return policies from eBay.",
         )
-        appendDebug("Connect eBay tapped. OAuth flow not wired yet.")
+        appendDebug("Connect eBay tapped. Loading account policy options.")
+        loadEbayAccountOptions(force = true)
     }
 
     fun createListingDraft() {
@@ -421,7 +423,9 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
                 condition = draft.condition,
                 category = draft.category,
                 shippingProfile = draft.shippingProfile,
+                shippingPolicyId = draft.shippingPolicyId,
                 returnPolicy = draft.returnPolicy,
+                returnPolicyId = draft.returnPolicyId,
                 quantity = draft.quantity,
                 publishedListingUrl = draft.publishedListingUrl,
                 publishStatus = if (draft.publishedListingUrl.isBlank()) "Not published yet." else "Published."
@@ -429,6 +433,7 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
             statusMessage = "Listing editor opened for ${draft.title}",
         )
         appendDebug("Listing editor opened for draft: ${draft.id}")
+        loadEbayAccountOptions()
     }
 
     fun closeListingEditor() {
@@ -462,12 +467,38 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
 
     fun updateListingEditorShippingProfile(value: String) {
         val editor = _uiState.value.listingEditor ?: return
-        _uiState.value = _uiState.value.copy(listingEditor = editor.copy(shippingProfile = value))
+        _uiState.value = _uiState.value.copy(listingEditor = editor.copy(shippingProfile = value, shippingPolicyId = ""))
     }
 
     fun updateListingEditorReturnPolicy(value: String) {
         val editor = _uiState.value.listingEditor ?: return
-        _uiState.value = _uiState.value.copy(listingEditor = editor.copy(returnPolicy = value))
+        _uiState.value = _uiState.value.copy(listingEditor = editor.copy(returnPolicy = value, returnPolicyId = ""))
+    }
+
+    fun refreshEbayAccountOptions() {
+        loadEbayAccountOptions(force = true)
+    }
+
+    fun selectShippingPolicy(policyId: String) {
+        val editor = _uiState.value.listingEditor ?: return
+        val policy = _uiState.value.fulfillmentPolicies.firstOrNull { it.id == policyId } ?: return
+        _uiState.value = _uiState.value.copy(
+            listingEditor = editor.copy(
+                shippingProfile = policy.name,
+                shippingPolicyId = policy.id,
+            )
+        )
+    }
+
+    fun selectReturnPolicy(policyId: String) {
+        val editor = _uiState.value.listingEditor ?: return
+        val policy = _uiState.value.returnPolicies.firstOrNull { it.id == policyId } ?: return
+        _uiState.value = _uiState.value.copy(
+            listingEditor = editor.copy(
+                returnPolicy = policy.name,
+                returnPolicyId = policy.id,
+            )
+        )
     }
 
     fun updateListingEditorQuantity(value: String) {
@@ -526,7 +557,9 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
                 condition = editor.condition,
                 category = editor.category,
                 shippingProfile = editor.shippingProfile,
+                shippingPolicyId = editor.shippingPolicyId,
                 returnPolicy = editor.returnPolicy,
+                returnPolicyId = editor.returnPolicyId,
                 quantity = editor.quantity,
                 channel = "ebay",
             )
@@ -600,7 +633,9 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
                 condition = editor.condition,
                 category = editor.category,
                 shippingProfile = editor.shippingProfile,
+                shippingPolicyId = editor.shippingPolicyId,
                 returnPolicy = editor.returnPolicy,
+                returnPolicyId = editor.returnPolicyId,
                 quantity = editor.quantity,
             )
         }
@@ -617,10 +652,69 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
         if (editor.photoPaths.isEmpty()) errors += "Add at least one photo."
         if (editor.condition.isBlank()) errors += "Choose an item condition."
         if (editor.category.isBlank()) errors += "Add an eBay category."
-        if (editor.shippingProfile.isBlank()) errors += "Add a shipping profile."
-        if (editor.returnPolicy.isBlank()) errors += "Add a return policy."
+        if (editor.shippingProfile.isBlank() && editor.shippingPolicyId.isBlank()) errors += "Add a shipping profile."
+        if (editor.returnPolicy.isBlank() && editor.returnPolicyId.isBlank()) errors += "Add a return policy."
         if (editor.quantity < 1) errors += "Quantity must be at least 1."
         return errors
+    }
+
+    private fun loadEbayAccountOptions(force: Boolean = false) {
+        val state = _uiState.value
+        if (state.isLoadingAccountOptions) return
+        if (!force && (state.fulfillmentPolicies.isNotEmpty() || state.returnPolicies.isNotEmpty())) return
+
+        viewModelScope.launch {
+            val backendUrl = normalizeBackendUrl(_uiState.value.backendBaseUrl)
+            if (backendUrl.isBlank()) {
+                _uiState.value = _uiState.value.copy(
+                    accountOptionsStatus = "Set a backend URL to load eBay account policies.",
+                )
+                return@launch
+            }
+
+            _uiState.value = _uiState.value.copy(
+                isLoadingAccountOptions = true,
+                accountOptionsStatus = "Loading eBay account policies...",
+            )
+
+            val result = runCatching {
+                backendClient.accountOptions(
+                    baseUrl = backendUrl,
+                    apiToken = _uiState.value.backendApiToken.trim(),
+                )
+            }
+
+            if (result.isSuccess) {
+                val options = result.getOrThrow()
+                val fulfillment = options.fulfillmentPolicies.map { it.toUiPolicyOption() }
+                val returns = options.returnPolicies.map { it.toUiPolicyOption() }
+                val message = if (options.connected) {
+                    "Loaded ${fulfillment.size} shipping and ${returns.size} return policies from ${options.marketplaceId}."
+                } else {
+                    options.message.ifBlank { "eBay account policies are not connected." }
+                }
+                _uiState.value = _uiState.value.copy(
+                    fulfillmentPolicies = fulfillment,
+                    returnPolicies = returns,
+                    isLoadingAccountOptions = false,
+                    accountOptionsStatus = message,
+                    ebayConnectionStatus = if (options.connected) "Connected to eBay (${options.marketplaceId})" else "Not connected",
+                )
+                appendDebug("Account options loaded: shipping=${fulfillment.size}, returns=${returns.size}, connected=${options.connected}")
+            } else {
+                val message = result.exceptionOrNull()?.message ?: "unknown account options error"
+                _uiState.value = _uiState.value.copy(
+                    isLoadingAccountOptions = false,
+                    accountOptionsStatus = "Failed loading eBay account policies: $message",
+                    ebayConnectionStatus = "Account policies unavailable",
+                )
+                appendDebug("Account options failed: $message")
+            }
+        }
+    }
+
+    private fun BackendPolicyOption.toUiPolicyOption(): EbayPolicyOption {
+        return EbayPolicyOption(id = id, name = name, description = description)
     }
 
     fun saveCurrentAsDraft(): Boolean {
@@ -667,7 +761,9 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
             condition = "",
             category = "",
             shippingProfile = "",
+            shippingPolicyId = "",
             returnPolicy = "",
+            returnPolicyId = "",
             quantity = 1,
         )
 
@@ -757,7 +853,9 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
                     .put("condition", draft.condition)
                     .put("category", draft.category)
                     .put("shippingProfile", draft.shippingProfile)
+                    .put("shippingPolicyId", draft.shippingPolicyId)
                     .put("returnPolicy", draft.returnPolicy)
+                    .put("returnPolicyId", draft.returnPolicyId)
                     .put("quantity", draft.quantity)
             )
         }
@@ -821,7 +919,9 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
                             condition = item.optString("condition", ""),
                             category = item.optString("category", ""),
                             shippingProfile = item.optString("shippingProfile", ""),
+                            shippingPolicyId = item.optString("shippingPolicyId", ""),
                             returnPolicy = item.optString("returnPolicy", ""),
+                            returnPolicyId = item.optString("returnPolicyId", ""),
                             quantity = item.optInt("quantity", 1).coerceAtLeast(1),
                         )
                     )

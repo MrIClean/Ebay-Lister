@@ -11,6 +11,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 
 from app.config import get_settings
 from app.models import (
+    AccountOptionsResponse,
     AnalyzeRequest,
     AnalyzeResponse,
     BarcodeLookupRequest,
@@ -18,6 +19,7 @@ from app.models import (
     CorrectionRequest,
     PublishListingRequest,
     PublishListingResponse,
+    PolicyOption,
     SimpleAnalyzeResponse,
 )
 from app.orchestrator import ListingPipeline
@@ -275,6 +277,37 @@ def save_correction(
     _authorize(x_api_key, request.client.host if request.client else None)
     pipeline.save_correction(payload.predicted, payload.corrected)
     return {"status": "saved"}
+
+
+@app.get("/account/options", response_model=AccountOptionsResponse)
+async def account_options(
+    request: Request,
+    x_api_key: str | None = Header(default=None, alias="X-Api-Key"),
+) -> AccountOptionsResponse:
+    _authorize(x_api_key, request.client.host if request.client else None)
+    try:
+        options = await ebay.account_options()
+        return AccountOptionsResponse(
+            connected=options.connected,
+            marketplace_id=options.marketplace_id,
+            source=options.source,
+            message=options.message,
+            fulfillment_policies=[
+                PolicyOption(id=policy.id, name=policy.name, description=policy.description)
+                for policy in options.fulfillment_policies
+            ],
+            return_policies=[
+                PolicyOption(id=policy.id, name=policy.name, description=policy.description)
+                for policy in options.return_policies
+            ],
+        )
+    except EbayClientError as exc:
+        return AccountOptionsResponse(
+            connected=False,
+            marketplace_id=settings.ebay_marketplace_id,
+            source="ebay-account-api",
+            message=str(exc),
+        )
 
 
 @app.post("/publish", response_model=PublishListingResponse)

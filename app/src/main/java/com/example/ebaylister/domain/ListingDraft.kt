@@ -8,7 +8,9 @@ data class ListingDraft(
     val condition: String = "",
     val category: String = "",
     val shippingProfile: String = "",
+    val shippingPolicyId: String = "",
     val returnPolicy: String = "",
+    val returnPolicyId: String = "",
     val quantity: Int = 1,
     val channel: String = "ebay",
 )
