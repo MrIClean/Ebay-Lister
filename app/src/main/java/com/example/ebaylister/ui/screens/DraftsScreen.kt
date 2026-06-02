@@ -2,6 +2,7 @@ package com.example.ebaylister.ui.screens
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
@@ -22,9 +24,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.ebaylister.ui.SavedDraftItem
 
@@ -32,11 +37,21 @@ import com.example.ebaylister.ui.SavedDraftItem
 fun DraftsScreen(
     drafts: List<SavedDraftItem>,
     onRemoveDraft: (String) -> Unit,
-    onSendToEbay: (SavedDraftItem) -> Unit,
+    onEditDraft: (SavedDraftItem) -> Unit,
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color(0xAA0B1220),
+                        Color(0xEE070B14),
+                    ),
+                ),
+            ),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -50,7 +65,7 @@ fun DraftsScreen(
                 Text(
                     text = "Save keepers from your thrift run and update a draft anytime by re-analyzing and saving again.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -59,12 +74,13 @@ fun DraftsScreen(
             item {
                 ElevatedCard(
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)),
                 ) {
                     Text(
                         text = "No drafts yet. Analyze an item on Main, then tap Save Draft.",
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
@@ -73,7 +89,7 @@ fun DraftsScreen(
         items(drafts, key = { it.id }) { draft ->
             ElevatedCard(
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)),
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
@@ -85,6 +101,9 @@ fun DraftsScreen(
                         text = draft.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -92,29 +111,41 @@ fun DraftsScreen(
                         AssistChip(onClick = {}, label = { Text(draft.source) })
                     }
 
-                    Text(
-                        text = "Avg ${draft.averagePrice}  Low ${draft.lowPrice}  High ${draft.highPrice}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    MetricGrid(
+                        metrics = listOf(
+                            MetricTile("Median", draft.medianPrice),
+                            MetricTile("Avg", draft.averagePrice),
+                            MetricTile("Low", draft.lowPrice),
+                            MetricTile("High", draft.highPrice),
+                        ),
                     )
 
                     Text(
                         text = "Listed ${draft.listedCount}  Sold ${draft.soldCount}  ${draft.confidence}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
 
                     if (draft.normalizedKeywords.isNotBlank()) {
                         Text(
                             text = "Search keywords: ${draft.normalizedKeywords}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { onSendToEbay(draft) }) {
-                            Text("Send to eBay")
+                        Button(
+                            onClick = { onEditDraft(draft) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
+                        ) {
+                            Text("Finish listing")
+                        }
+                        if (draft.publishedListingUrl.isNotBlank()) {
+                            AssistChip(onClick = {}, label = { Text("Published") })
                         }
                         AssistChip(
                             onClick = { onRemoveDraft(draft.id) },

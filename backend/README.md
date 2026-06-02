@@ -2,10 +2,10 @@
 
 Modular Python backend for image-to-comps workflow:
 
-1. Analyze image with multimodal AI (Gemini when key exists, mock otherwise).
-2. Normalize listing keywords.
-3. Query eBay sold comps (real API when enabled, mock otherwise).
-4. Build a market snapshot: active listed count, sold count, and sold price summary.
+1. Identify from image using eBay Browse `search_by_image` (production eBay mode).
+2. Fall back to multimodal AI (Gemini, then mock) only when image search is unavailable.
+3. Normalize listing keywords.
+4. Build a market snapshot from eBay results.
 5. Cache comps and support local correction memory.
 
 ## Why this design
@@ -64,6 +64,19 @@ Notes:
 
 - Provide `image_base64` when the backend cannot access the local file path directly (for example, Android phone to desktop backend).
 - `image_path` is still supported for local desktop testing.
+- In production eBay mode, this endpoint first uses Browse image search so item details come directly from eBay listing matches.
+
+### `POST /identify/barcode`
+
+Payload:
+
+```json
+{
+  "barcode": "045496590421"
+}
+```
+
+Returns top eBay Catalog product match (title, brand, ePID, image URL, product page URL, GTIN list).
 
 ### `POST /corrections`
 
@@ -76,6 +89,30 @@ Payload:
 }
 ```
 
+### `POST /publish`
+
+Validates and packages an edited listing draft from the Android listing editor.
+This endpoint does not submit to eBay yet; it is the backend handoff point for the next Sell API integration.
+
+Payload:
+
+```json
+{
+  "title": "Sony Walkman WM-FX101 Portable Cassette Player",
+  "description": "Tested portable cassette player with visible cosmetic wear.",
+  "price": "$58.00",
+  "photo_paths": ["C:/path/to/photo.jpg"],
+  "condition": "Pre-owned",
+  "category": "Portable Audio & Headphones",
+  "shipping_profile": "USPS Ground Advantage",
+  "return_policy": "30 day returns",
+  "quantity": 1,
+  "channel": "ebay"
+}
+```
+
+Returns `success=false` with `validation_errors` until required seller details are complete.
+
 ## Real eBay mode
 
 Set in `.env`:
@@ -87,6 +124,26 @@ Set in `.env`:
 - `EBAY_ENVIRONMENT=sandbox` (or `production`)
 - `EBAY_MARKETPLACE_ID=EBAY_US`
 
+If you want to keep both keysets in one file and switch quickly, you can also set:
+
+- `EBAY_SANDBOX_CLIENT_ID=...`
+- `EBAY_SANDBOX_CLIENT_SECRET=...`
+- `EBAY_SANDBOX_REFRESH_TOKEN=...`
+- `EBAY_SANDBOX_MARKETPLACE_ID=EBAY_US` (optional)
+- `EBAY_PRODUCTION_CLIENT_ID=...`
+- `EBAY_PRODUCTION_CLIENT_SECRET=...`
+- `EBAY_PRODUCTION_REFRESH_TOKEN=...`
+- `EBAY_PRODUCTION_MARKETPLACE_ID=EBAY_US` (optional)
+
+Then switch only:
+
+- `EBAY_ENVIRONMENT=sandbox` or `EBAY_ENVIRONMENT=production`
+
+Selection rules:
+
+- If environment-specific vars exist, they are used.
+- If they are missing, backend falls back to generic `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_REFRESH_TOKEN`, and `EBAY_MARKETPLACE_ID`.
+
 If real eBay fails, cached comps are used first, then optional mock fallback.
 
 Quick verification after restart:
@@ -97,10 +154,9 @@ Quick verification after restart:
 
 Comps source labels returned by `/analyze`:
 
-- `ebay-api`: live eBay Browse API results
-- `mock`: synthetic pricing generated from keyword hash (for dev only)
-- `mock-fallback`: synthetic pricing used after real eBay errors when fallback is enabled
-- `cache`: previously cached comps
+- `eBay Browse Image Search`: live listing prices from Browse `search_by_image`
+- `eBay Sold Comps`: sold comps from Browse keyword search
+- `Estimated Market Value`: cache or mock fallback valuation
 
 ## Real AI mode (Gemini)
 
@@ -130,6 +186,28 @@ Set `BACKEND_API_TOKEN` in `.env` for simple app-to-backend authentication.
 
 - When set, clients must send header: `X-Api-Key: <BACKEND_API_TOKEN>`
 - `GET /health`, `POST /analyze`, and `POST /corrections` enforce this token.
+
+## Production prerequisite: account deletion notifications
+
+eBay production keysets require a public HTTPS callback for Marketplace Account Deletion notifications.
+
+Set in `.env`:
+
+- `EBAY_NOTIFICATION_VERIFICATION_TOKEN=...` (any random string you choose)
+- `EBAY_NOTIFICATION_ENDPOINT_URL=https://your-public-host/ebay/notifications/account-deletion`
+
+Backend endpoints:
+
+- `GET /ebay/notifications/account-deletion?challenge_code=...`
+- `POST /ebay/notifications/account-deletion`
+
+Setup flow in eBay Developer Portal (Production -> Alerts & Notifications):
+
+- Email to notify: your email
+- Marketplace account deletion notification endpoint: `EBAY_NOTIFICATION_ENDPOINT_URL`
+- Verification token: `EBAY_NOTIFICATION_VERIFICATION_TOKEN`
+
+If using a temporary free tunnel, start your backend and expose it with Cloudflare quick tunnel, then set `EBAY_NOTIFICATION_ENDPOINT_URL` to that tunnel URL + `/ebay/notifications/account-deletion`.
 
 ## Snapshot fields returned by `/analyze`
 

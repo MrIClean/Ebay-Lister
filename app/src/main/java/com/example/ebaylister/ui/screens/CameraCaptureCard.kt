@@ -13,12 +13,16 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -28,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
@@ -118,19 +123,31 @@ fun CameraCaptureCard(
 
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
             text = "Camera",
             style = MaterialTheme.typography.titleMedium,
         )
 
-        AndroidView(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(240.dp),
-            factory = { previewView },
-        )
+                .height(248.dp)
+                .clip(MaterialTheme.shapes.large),
+            tonalElevation = 1.dp,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+        ) {
+            Box(modifier = Modifier.padding(2.dp)) {
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(244.dp)
+                        .clip(MaterialTheme.shapes.large),
+                    factory = { previewView },
+                )
+            }
+        }
 
         Button(
             onClick = {
@@ -141,7 +158,6 @@ fun CameraCaptureCard(
 
                 val outputFile = createPersistentPhotoFile(context)
                 val outputOptions = ImageCapture.OutputFileOptions.Builder(outputFile).build()
-
                 imageCapture.takePicture(
                     outputOptions,
                     mainExecutor,
@@ -163,6 +179,10 @@ fun CameraCaptureCard(
                 )
             },
             modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
         ) {
             Text("Take photo")
         }

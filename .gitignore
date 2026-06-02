@@ -8,7 +8,9 @@ captures/
 backend/.env
 backend/.state/
 backend/.venv/
+backend/.tmp/
 **/__pycache__/
 *.pyc
 backend/tunnel_*.err.log
 backend/tunnel_*.out.log
+scripts/.usb-install-state.json

@@ -1,27 +1,29 @@
 package com.example.ebaylister.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 
 @Composable
 fun EbayListerTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = Ink,
-            onPrimary = Color.White,
-            secondary = Teal,
-            onSecondary = Color.White,
-            tertiary = WarmAccent,
-            onTertiary = Color.White,
-            background = Paper,
-            onBackground = Ink,
-            surface = Color.White,
-            onSurface = Ink,
-            surfaceVariant = Color(0xFFF1F5F9),
-            onSurfaceVariant = Slate,
-            outline = SoftBorder,
+        colorScheme = darkColorScheme(
+            primary = NeonCyan,
+            onPrimary = NeonBlack,
+            secondary = NeonMagenta,
+            onSecondary = NeonInk,
+            tertiary = NeonLime,
+            onTertiary = NeonInk,
+            background = NeonBlack,
+            onBackground = NeonInk,
+            surface = NeonPanel,
+            onSurface = NeonInk,
+            surfaceVariant = NeonPanelAlt,
+            onSurfaceVariant = NeonMuted,
+            outline = NeonBorder,
+            outlineVariant = NeonBorder,
+            inverseSurface = NeonInk,
+            inverseOnSurface = NeonBlack,
         ),
         typography = AppTypography,
         content = content,

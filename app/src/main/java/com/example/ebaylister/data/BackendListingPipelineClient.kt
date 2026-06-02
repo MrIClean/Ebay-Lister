@@ -1,6 +1,8 @@
 package com.example.ebaylister.data
 
 import android.util.Base64
+import com.example.ebaylister.domain.DraftPublishResult
+import com.example.ebaylister.domain.ListingDraft
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -9,12 +11,18 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 
 class BackendListingPipelineClient {
     private val httpClient = OkHttpClient()
 
-    suspend fun analyze(baseUrl: String, imagePath: String, apiToken: String = ""): BackendAnalyzeResult = withContext(Dispatchers.IO) {
+    suspend fun analyze(
+        baseUrl: String,
+        imagePath: String,
+        apiToken: String = "",
+        overrideKeywords: String = "",
+    ): BackendAnalyzeResult = withContext(Dispatchers.IO) {
         val imageFile = File(imagePath)
         val imageBytes = imageFile.readBytes()
         val imageBase64 = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
@@ -24,11 +32,14 @@ class BackendListingPipelineClient {
             else -> "image/jpeg"
         }
 
-        val payload = JSONObject()
+        val payloadJson = JSONObject()
             .put("image_path", imagePath)
             .put("image_base64", imageBase64)
             .put("image_mime_type", imageMimeType)
-            .toString()
+        if (overrideKeywords.isNotBlank()) {
+            payloadJson.put("override_keywords", overrideKeywords.trim())
+        }
+        val payload = payloadJson.toString()
 
         val requestBuilder = Request.Builder()
             .url("$baseUrl/analyze")
@@ -63,6 +74,7 @@ class BackendListingPipelineClient {
                 confidencePercent = (vision.optDouble("confidence", 0.0) * 100).toInt(),
                 visionProvider = vision.optString("provider", "unknown"),
                 visionModelName = vision.optString("model_name", "unknown"),
+                listingDescription = vision.optString("listing_description", ""),
                 suggestedKeywords = keywords,
                 normalizedKeywords = root.optString("normalized_keywords", ""),
                 soldCompsCount = comps.optInt("sold_count", 0),
@@ -98,6 +110,55 @@ class BackendListingPipelineClient {
                     val errorBody = response.body?.string().orEmpty().take(300)
                     throw RuntimeException("Backend correction save failed: ${response.code} $errorBody")
                 }
+            }
+        }
+    }
+
+    suspend fun publishDraft(baseUrl: String, draft: ListingDraft, apiToken: String = ""): DraftPublishResult = withContext(Dispatchers.IO) {
+        val payload = JSONObject()
+            .put("title", draft.title)
+            .put("description", draft.description)
+            .put("price", draft.price)
+            .put("photo_paths", JSONArray(draft.photoPaths))
+            .put("condition", draft.condition)
+            .put("category", draft.category)
+            .put("shipping_profile", draft.shippingProfile)
+            .put("return_policy", draft.returnPolicy)
+            .put("quantity", draft.quantity)
+            .put("channel", draft.channel)
+            .toString()
+
+        val requestBuilder = Request.Builder()
+            .url("$baseUrl/publish")
+            .post(payload.toRequestBody("application/json".toMediaType()))
+        if (apiToken.isNotBlank()) {
+            requestBuilder.header("X-Api-Key", apiToken)
+        }
+        val request = requestBuilder.build()
+
+        withRetry {
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw RuntimeException("Backend publish failed: ${response.code} ${body.take(300)}")
+                }
+
+                val root = JSONObject(body)
+                val errorsArray = root.optJSONArray("validation_errors")
+                val errors = mutableListOf<String>()
+                if (errorsArray != null) {
+                    for (i in 0 until errorsArray.length()) {
+                        val error = errorsArray.optString(i).trim()
+                        if (error.isNotBlank()) errors += error
+                    }
+                }
+
+                DraftPublishResult(
+                    success = root.optBoolean("success", false),
+                    message = root.optString("message", "Publish response received."),
+                    listingUrl = root.optString("listing_url", ""),
+                    validationErrors = errors,
+                )
             }
         }
     }
@@ -157,6 +218,7 @@ data class BackendAnalyzeResult(
     val confidencePercent: Int,
     val visionProvider: String,
     val visionModelName: String,
+    val listingDescription: String = "",
     val suggestedKeywords: List<String>,
     val normalizedKeywords: String,
     val soldCompsCount: Int,

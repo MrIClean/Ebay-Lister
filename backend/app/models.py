@@ -8,6 +8,7 @@ class VisionResult(BaseModel):
     condition_guess: str
     suggested_keywords: list[str] = Field(default_factory=list)
     draft_title: str
+    listing_description: str = ""
     confidence: float
     provider: str = "unknown"
     model_name: str = "unknown"
@@ -47,9 +48,44 @@ class AnalyzeResponse(BaseModel):
     comps: CompsSummary
 
 
+class BarcodeLookupRequest(BaseModel):
+    barcode: str
+
+
+class BarcodeLookupResponse(BaseModel):
+    title: str
+    brand: str = ""
+    category: str = ""
+    epid: str = ""
+    product_web_url: str = ""
+    image_url: str = ""
+    gtins: list[str] = Field(default_factory=list)
+    source: str = "eBay Catalog"
+
+
 class CorrectionRequest(BaseModel):
     predicted: str
     corrected: str
+
+
+class PublishListingRequest(BaseModel):
+    title: str
+    description: str
+    price: str
+    photo_paths: list[str] = Field(default_factory=list)
+    condition: str = ""
+    category: str = ""
+    shipping_profile: str = ""
+    return_policy: str = ""
+    quantity: int = 1
+    channel: str = "ebay"
+
+
+class PublishListingResponse(BaseModel):
+    success: bool
+    message: str
+    listing_url: str = ""
+    validation_errors: list[str] = Field(default_factory=list)
 
 
 class SimpleAnalyzeResponse(BaseModel):

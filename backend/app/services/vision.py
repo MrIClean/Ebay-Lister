@@ -26,6 +26,7 @@ class MockVisionService(VisionService):
                 condition_guess="Used",
                 suggested_keywords=["push broom", "cleaning broom", "long handle broom"],
                 draft_title="Push Broom Long Handle Cleaning Tool",
+                listing_description="Sturdy long-handle push broom suitable for garages, patios, and workshops. Shows normal signs of use with bristles still intact. No handle cracks or damage visible.",
                 confidence=0.72,
                 provider="mock",
                 model_name="mock-filename-rules",
@@ -38,6 +39,7 @@ class MockVisionService(VisionService):
                 condition_guess="Used",
                 suggested_keywords=["handheld game console", "portable gaming device", "retro console"],
                 draft_title="Handheld Game Console Portable Gaming Device",
+                listing_description="Portable handheld game console in used condition. Unit powers on and buttons are responsive. Includes console only — no games or charger pictured.",
                 confidence=0.7,
                 provider="mock",
                 model_name="mock-filename-rules",
@@ -50,6 +52,7 @@ class MockVisionService(VisionService):
             condition_guess="Unknown",
             suggested_keywords=["unknown item"],
             draft_title="Unknown Item",
+            listing_description="",
             confidence=0.2,
             provider="mock",
             model_name="mock-filename-rules",
@@ -57,9 +60,15 @@ class MockVisionService(VisionService):
 
 
 class GeminiVisionService(VisionService):
-    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash") -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model_name: str = "gemini-2.0-flash",
+        fallback: VisionService | None = None,
+    ) -> None:
         self.api_key = api_key
         self.model_name = model_name
+        self.fallback = fallback
 
     async def analyze(self, image_path: str) -> VisionResult:
         if not self.api_key:
@@ -82,9 +91,12 @@ class GeminiVisionService(VisionService):
             "Only fall back to shape, materials, and logos if no readable text is present. "
             "If uncertain, keep model generic but still useful for eBay search. "
             "Return ONLY valid JSON with exact keys: "
-            "brand, model, category, condition_guess, suggested_keywords, draft_title, confidence. "
+            "brand, model, category, condition_guess, suggested_keywords, draft_title, listing_description, confidence. "
             "Rules: suggested_keywords must be an array of 3 to 6 short search phrases optimized for eBay; "
             "draft_title must be the exact manufacturer and model name, concise and searchable; "
+            "listing_description must be 2 to 3 plain sentences written for an eBay buyer — "
+            "mention what the item is, any notable features or included accessories visible in the photo, "
+            "and a brief condition note; keep it natural, no bullet points, no jargon, no filler phrases like 'great condition'; "
             "brand and model must never contain warehouse codes or sticker prices; "
             "confidence must be a number from 0.0 to 1.0."
         )
@@ -124,6 +136,8 @@ class GeminiVisionService(VisionService):
                 last_error = exc
 
         if response is None:
+            if self.fallback:
+                return await self.fallback.analyze(image_path)
             raise RuntimeError(f"Gemini generation failed for all supported models: {last_error}")
 
         parsed = self._parse_json_object(response.text or "")

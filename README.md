@@ -33,8 +33,13 @@ Android starter project for an item-identification and eBay listing workflow.
 ## Current app flow
 
 - `Main` screen: capture photo, tap `Analyze`, then tap `Save Draft` for keeper items.
-- `Drafts` screen: view saved item drafts from sourcing trips and remove drafts you do not want.
+- `Drafts` screen: build a thrifting-run queue of multiple drafts, then open `Finish listing` for any draft when you are ready to complete it.
+- `Listing details` screen: edit title, price, description, add more photos, publish to eBay from inside the app flow, then view or share the published listing link.
+- `Listing details` now captures publish-required seller fields: condition, category, shipping profile, return policy, and quantity.
+- Publish now validates a listing package locally and through the backend `/publish` endpoint when a backend URL is configured. Real eBay Sell API submission is still the next integration step.
 - Re-analyzing and saving the same detected item updates the existing draft entry.
+- `Analyze` stays disabled until a photo is captured to prevent empty-analysis requests.
+- In `Connection`, entering only `host:port` auto-expands to `http://host:port`.
 
 ## Project status
 
@@ -87,8 +92,10 @@ Open the Android project in Android Studio, then connect the placeholder actions
 A modular Python backend is now included in [backend/README.md](backend/README.md).
 It provides a free-first image-to-comps workflow with:
 
-- multimodal vision analysis (Gemini when configured, mock fallback)
+- eBay Browse image-based item identification (`search_by_image`)
+- multimodal vision fallback (Gemini when configured, mock fallback)
 - eBay sold comps retrieval (real API or mock)
+- barcode-to-catalog lookup (`POST /identify/barcode`)
 - local correction memory
 - cached fallback for resilient valuation
 
@@ -99,15 +106,30 @@ The Android app now calls `POST /analyze` and `POST /corrections` from the backe
 1. Start backend on your computer:
 
 ```powershell
-cd backend
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+cd scripts
+.\start_backend.ps1
 ```
+
+`start_backend.ps1` now also watches for USB Android devices via adb.
+When a device connects, it automatically:
+
+- applies `adb reverse tcp:8000 tcp:8000`
+- builds `:app:assembleDebug` and compares APK hash for that device
+- runs `:app:installDebug` only when the APK changed (or app is missing on device)
+- launches the app on the connected device
 
 2. In the app, set `Backend URL` to your computer LAN address, for example:
 
 ```text
 http://192.168.1.10:8000
 ```
+
+For USB testing, the app pre-fills local mode with `http://127.0.0.1:8000`.
+This works with `adb reverse tcp:8000 tcp:8000`.
+
+Cloud URL is intentionally blank until you set your tunnel URL.
+
+Leave `Backend API Token` blank unless your backend sets `BACKEND_API_TOKEN`.
 
 3. Capture a photo and tap `Analyze`.
 
@@ -157,3 +179,30 @@ Notes:
 
 - Quick tunnel URLs change each time you restart the tunnel.
 - This mode is free, but your backend is only available while your computer is running.
+
+## Keep local backend always ready (Windows)
+
+If local connection keeps failing because backend is not running, install autostart once:
+
+```powershell
+cd scripts
+.\install_backend_autostart.ps1
+```
+
+What this does:
+
+- creates a Windows Scheduled Task named `PixelProfitLocalBackend`
+- starts backend in hidden background at sign-in
+- keeps USB testing support from `start_backend.ps1` (adb reverse + auto install/launch checks)
+
+Useful commands:
+
+```powershell
+# Start backend now in hidden background (without waiting for next sign-in)
+cd scripts
+.\start_backend_background.ps1
+
+# Remove autostart task
+cd scripts
+.\uninstall_backend_autostart.ps1
+```
