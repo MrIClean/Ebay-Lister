@@ -245,7 +245,15 @@ fun HomeScreen(
             ) {
                 Text(text = "Connection", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    text = "USB local mode is prefilled; cloud stays empty until you add a tunnel URL.",
+                    text = if (state.backendMode == "cloud") {
+                        if (state.backendApiToken.isBlank()) {
+                            "Cloud URL is saved. Add the backend API token before testing away from USB."
+                        } else {
+                            "Cloud mode is ready to test. Keep the computer backend and tunnel running."
+                        }
+                    } else {
+                        "USB local mode is prefilled; switch to Cloud for use away from the PC."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -312,7 +320,11 @@ fun HomeScreen(
                 )
 
                 Text(
-                    text = "API token is optional unless your backend sets BACKEND_API_TOKEN.",
+                    text = if (state.backendMode == "cloud") {
+                        "Cloud mode needs this token when BACKEND_API_TOKEN is set on the backend."
+                    } else {
+                        "API token is optional for USB local mode unless backend auth is enabled."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )

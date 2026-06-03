@@ -6,6 +6,7 @@ local.properties
 *.iml
 captures/
 backend/.env
+backend/.env.bak.*
 backend/.state/
 backend/.venv/
 backend/.tmp/
@@ -13,4 +14,6 @@ backend/.tmp/
 *.pyc
 backend/tunnel_*.err.log
 backend/tunnel_*.out.log
+backend/.last-cloud-link
+backend/.last-cloud-url
 scripts/.usb-install-state.json

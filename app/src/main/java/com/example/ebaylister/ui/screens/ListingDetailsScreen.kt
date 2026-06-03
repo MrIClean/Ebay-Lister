@@ -8,6 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -47,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.example.ebaylister.ui.EbayPolicyOption
 import com.example.ebaylister.ui.ListingEditorState
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListingDetailsScreen(
     editor: ListingEditorState,
@@ -287,6 +292,7 @@ fun ListingDetailsScreen(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun ListingDropdown(
     label: String,
     value: String,
@@ -298,41 +304,57 @@ private fun ListingDropdown(
     var expanded by remember(label, options) { mutableStateOf(false) }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { fallbackValueChange?.invoke(it) },
-            readOnly = fallbackValueChange == null || options.isNotEmpty(),
-            label = { Text(label) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = options.isNotEmpty()) { expanded = true },
-            singleLine = true,
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(option.name)
-                            if (option.description.isNotBlank()) {
-                                Text(
-                                    text = option.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    },
-                    onClick = {
-                        onSelect(option)
-                        expanded = false
-                    },
+        if (options.isEmpty() && fallbackValueChange != null) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = fallbackValueChange,
+                label = { Text(label) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+        } else {
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded },
+            ) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(label) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth(),
+                    singleLine = true,
                 )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                ) {
+                    options.forEach { option ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(option.name)
+                                    if (option.description.isNotBlank()) {
+                                        Text(
+                                            text = option.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = {
+                                onSelect(option)
+                                expanded = false
+                            },
+                        )
+                    }
+                }
             }
         }
     }

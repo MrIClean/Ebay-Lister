@@ -164,21 +164,21 @@ Start it:
 
 ```powershell
 cd scripts
-.\start_bridge_windows.ps1
+.\start_cloud_mode.ps1
 ```
 
-Then:
+The script starts the backend, opens a Cloudflare quick tunnel, and saves:
 
-1. In the tunnel window, copy the `https://*.trycloudflare.com` URL.
-2. In the app, switch mode to `Cloud`.
-3. Set `Backend URL` to that tunnel URL.
-4. Set `Backend API Token` to the value of `BACKEND_API_TOKEN` in `backend/.env`.
-5. Tap `Test connection`, then run Analyze.
+- `backend/.last-cloud-url`: the current `https://*.trycloudflare.com` backend URL
+- `backend/.last-cloud-link`: a `pixelprofit://connection?...` setup link that switches the phone app to Cloud mode
+
+If your phone is connected by USB, the script also updates the app settings directly. If it is not connected, open the setup link on your phone, enter the backend API token if the app does not already have it saved, then tap `Test connection`.
 
 Notes:
 
 - Quick tunnel URLs change each time you restart the tunnel.
 - This mode is free, but your backend is only available while your computer is running.
+- For security, the setup link does not include `BACKEND_API_TOKEN`.
 
 ## Keep local backend always ready (Windows)
 

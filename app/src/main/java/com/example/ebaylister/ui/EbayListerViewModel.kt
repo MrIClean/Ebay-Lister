@@ -2,6 +2,7 @@ package com.example.ebaylister.ui
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -103,6 +104,57 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
         appendDebug("Switched backend mode to $chosenMode using URL $chosenUrl")
     }
 
+    fun applyConnectionDeepLink(uri: Uri) {
+        if (uri.scheme != "pixelprofit" || uri.host != "connection") {
+            appendDebug("Ignored unsupported deep link: $uri")
+            return
+        }
+
+        val mode = uri.getQueryParameter("mode")?.lowercase()
+        val chosenMode = if (mode == "local") "local" else "cloud"
+        val urlParam = uri.getQueryParameter("backend_url") ?: uri.getQueryParameter("url") ?: ""
+        val normalizedUrl = normalizeBackendUrl(urlParam)
+        val tokenParam = uri.getQueryParameter("api_token") ?: uri.getQueryParameter("token")
+        val token = tokenParam?.trim() ?: _uiState.value.backendApiToken
+
+        if (normalizedUrl.isBlank()) {
+            val status = "Connection link is missing a backend URL."
+            _uiState.value = _uiState.value.copy(connectionStatus = status, statusMessage = status)
+            appendDebug(status)
+            return
+        }
+
+        val editor = prefs.edit()
+            .putString("backend_mode", chosenMode)
+            .putString("backend_api_token", token)
+
+        if (chosenMode == "cloud") {
+            editor.putString("cloud_backend_url", normalizedUrl)
+        } else {
+            editor.putString("local_backend_url", normalizedUrl)
+        }
+        editor.apply()
+
+        _uiState.value = _uiState.value.copy(
+            backendMode = chosenMode,
+            backendBaseUrl = normalizedUrl,
+            localBackendUrl = if (chosenMode == "local") normalizedUrl else _uiState.value.localBackendUrl,
+            cloudBackendUrl = if (chosenMode == "cloud") normalizedUrl else _uiState.value.cloudBackendUrl,
+            backendApiToken = token,
+            connectionStatus = if (chosenMode == "cloud" && token.isBlank()) {
+                "Cloud URL saved. Enter backend API token, then tap Test."
+            } else {
+                "Configured from setup link. Tap Test to verify."
+            },
+            statusMessage = if (chosenMode == "cloud" && token.isBlank()) {
+                "Cloud URL saved. Add the backend API token before analyzing away from USB."
+            } else {
+                "Cloud connection saved. You can analyze without USB while the backend tunnel is running."
+            },
+        )
+        appendDebug("Applied $chosenMode backend settings from deep link: $normalizedUrl")
+    }
+
     fun testBackendConnection() {
         viewModelScope.launch {
             val backendUrl = normalizeBackendUrl(_uiState.value.backendBaseUrl)
@@ -112,6 +164,13 @@ class EbayListerViewModel(application: Application) : AndroidViewModel(applicati
                 val status = "Connection failed: enter a backend URL first"
                 _uiState.value = _uiState.value.copy(connectionStatus = status, statusMessage = status)
                 appendDebug("Health skipped: backend URL is blank.")
+                return@launch
+            }
+
+            if (_uiState.value.backendMode == "cloud" && token.isBlank()) {
+                val status = "Connection needs backend API token for Cloud mode."
+                _uiState.value = _uiState.value.copy(connectionStatus = status, statusMessage = status)
+                appendDebug("Health skipped: cloud mode token is blank.")
                 return@launch
             }
 
